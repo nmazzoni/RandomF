@@ -1,0 +1,59 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import StratifiedShuffleSplit
+import warnings
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, roc_curve, precision_recall_curve, confusion_matrix
+warnings.filterwarnings("ignore",category=UserWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+
+data=pd.read_csv("C:/Users/Utente ASUS/Desktop/Dati Python/MachineLearning/churndata_processed.csv")
+fig,ax =plt.subplots()
+sns.heatmap(data.corr())
+target="churn_value"
+data[target].value_counts(normalize=True)
+feature_cols=[x for x in  data.columns if x != target]
+sss=StratifiedShuffleSplit(n_splits=1,test_size=1500,random_state=42)
+train_idx,test_idx=next(sss.split(data[feature_cols], data[target]))
+x_train=data.loc[train_idx,feature_cols]
+y_train=data.loc[train_idx,target]
+x_test=data.loc[test_idx,feature_cols]
+y_test=data.loc[test_idx,target]
+
+rf=RandomForestClassifier(oob_score=True, random_state=42, warm_start=True, n_jobs=-1)
+obb_list=list()
+for n_trees in [15,20,30,40,50,100,150,200,300,400]:
+    rf.set_params(n_estimators=n_trees)
+    rf.fit(x_train,y_train)
+    obb_error=1-rf.oob_score_
+    obb_list.append(pd.Series({"n_trees":n_trees,"obb":obb_error}))
+    
+rf_obb_df=pd.concat(obb_list,axis=1).T.set_index("n_trees")
+
+sns.set_context("talk")
+sns.set_style("white")
+ax=rf_obb_df.plot(legend=False,marker="o")
+
+model=RandomForestClassifier(n_estimators=100)
+model.fit(x_test,y_test)
+pred=model.predict(x_test)
+prob=model.predict_proba(x_test)
+cr=classification_report(y_test,pred)
+score_df=pd.DataFrame({"accuracy":accuracy_score(y_test,pred),
+                       "precision":precision_score(y_test,pred),
+                       "recall":recall_score(y_test,pred),
+                       "f1":f1_score(y_test,pred),
+                       "roc_auc":roc_auc_score(y_test,pred)},index=pd.Index([0]))
+
+
+sns.set_context("talk")
+cm=confusion_matrix(y_test,pred)
+_,ax=plt.subplots()
+ax=sns.heatmap(cm,annot=True)
+labels=["Not Churn","Churn"]
+
+ax.set_ylabel("GroundTruth")
+ax.set_xlabel("Prediction")
